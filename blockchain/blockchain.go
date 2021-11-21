@@ -13,7 +13,7 @@ type block struct {
 }
 
 type blockChain struct {
-	blocks []block
+	blocks []*block
 }
 
 var bc *blockChain
@@ -33,7 +33,7 @@ func (b *block) calcHash() {
 func (bc *blockChain) AddBlock(data string) {
 	block := block{data, "", bc.getLastHash()}
 	block.calcHash()
-	bc.blocks = append(bc.blocks, block)
+	bc.blocks = append(bc.blocks, &block)
 }
 
 func (bc *blockChain) PrintBlocks() {
