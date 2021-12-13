@@ -1,48 +1,80 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 
 	"github.com/sjquant/nomadcoin/blockchain"
+	"github.com/sjquant/nomadcoin/utils"
 )
 
 const (
-	port        string = "4000"
-	templateDir string = "templates"
+	port string = "4000"
 )
 
-type homeData struct {
-	PageTitle string
-	Blocks    []*blockchain.Block
+type AddBlockBody struct {
+	Message string
+}
+type URL string
+
+func (u URL) MarshalText() ([]byte, error) {
+	url := fmt.Sprintf("http://localhost:%s%s", port, u)
+	return []byte(url), nil
 }
 
-var templates *template.Template
-
-func home(rw http.ResponseWriter, req *http.Request) {
-	data := homeData{"Home", blockchain.GetBlockChain().AllBlocks()}
-	templates.ExecuteTemplate(rw, "home", data)
+type URLDescription struct {
+	URL         URL    `json:"url"`
+	Method      string `json:"method"`
+	Description string `json:"description"`
+	Payload     string `json:"payload,omitempty"`
 }
 
-func add(rw http.ResponseWriter, req *http.Request) {
-	switch req.Method {
+func documentation(rw http.ResponseWriter, r *http.Request) {
+	data := []URLDescription{
+		{
+			URL:         URL("/"),
+			Method:      "GET",
+			Description: "See Documentation",
+		},
+		{
+			URL:         URL("/blocks"),
+			Method:      "GET",
+			Description: "See All Blocks",
+		},
+		{
+			URL:         URL("/blocks"),
+			Method:      "POST",
+			Description: "Add A Block",
+			Payload:     "data:string",
+		},
+		{
+			URL:         URL("/blocks/{id}"),
+			Method:      "GET",
+			Description: "See A Block",
+		},
+	}
+	rw.Header().Add("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(data)
+}
+
+func blocks(rw http.ResponseWriter, r *http.Request) {
+	switch r.Method {
 	case "GET":
-		templates.ExecuteTemplate(rw, "add", nil)
+		rw.Header().Add("Content-Type", "application/json")
+		json.NewEncoder(rw).Encode(blockchain.GetBlockChain().AllBlocks())
 	case "POST":
-		req.ParseForm()
-		blockData := req.Form.Get("blockData")
-		blockchain.GetBlockChain().AddBlock(blockData)
-		http.Redirect(rw, req, "/", http.StatusPermanentRedirect)
+		var addBlockBody AddBlockBody
+		utils.HandleErr(json.NewDecoder(r.Body).Decode(&addBlockBody))
+		blockchain.GetBlockChain().AddBlock(addBlockBody.Message)
+		rw.WriteHeader(http.StatusCreated)
 	}
 }
 
 func main() {
-	templates = template.Must(template.ParseGlob(templateDir + "/*.gohtml"))
-	templates = template.Must(templates.ParseGlob(templateDir + "/partials/*.gohtml"))
-	http.HandleFunc("/", home)
-	http.HandleFunc("/add", add)
+	http.HandleFunc("/", documentation)
+	http.HandleFunc("/blocks", blocks)
 	fmt.Printf("Listening on http://localhost:%s\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
 }
